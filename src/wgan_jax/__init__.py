@@ -576,7 +576,7 @@ class WGAN:
         return history
 
     @staticmethod
-    @jax.jit
+    @functools.partial(jax.jit, static_argnums=(0, 1))
     def _evaluate_wd(gen_model, critic_model, critic_state, gen_state, x_test, cond_test, rng):
         """Compute Wasserstein distance estimate on test data."""
         rng, noise_rng = jax.random.split(rng)
