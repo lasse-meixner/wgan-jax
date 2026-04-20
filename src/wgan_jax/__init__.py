@@ -524,11 +524,12 @@ class WGAN:
         x_train, cond_train = x[train_idx], cond[train_idx]
         x_test, cond_test = x[test_idx], cond[test_idx]
 
-        # Build JIT-compiled train step
+        # Build JIT-compiled train step and eval function
         train_step = _make_train_step(
             self._gen_model, self._critic_model,
             self._gp_factor, self._critic_steps, batch_size,
         )
+        evaluate_wd = self._make_evaluate_wd(self._gen_model, self._critic_model)
 
         n_train = x_train.shape[0]
         steps_per_epoch = max(1, n_train // batch_size)
@@ -556,7 +557,7 @@ class WGAN:
                 g_loss_avg = float(g_loss_acc) / steps_per_epoch
 
                 # Test Wasserstein distance
-                wd_test = self._evaluate_wd(self._gen_model, self._critic_model, critic_state, gen_state, x_test, cond_test, rng)
+                wd_test = evaluate_wd(critic_state, gen_state, x_test, cond_test, rng)
                 rng, _ = jax.random.split(rng)
 
                 history["wd_train"].append(wd_train)
@@ -576,23 +577,25 @@ class WGAN:
         return history
 
     @staticmethod
-    @functools.partial(jax.jit, static_argnums=(0, 1))
-    def _evaluate_wd(gen_model, critic_model, critic_state, gen_state, x_test, cond_test, rng):
-        """Compute Wasserstein distance estimate on test data."""
-        rng, noise_rng = jax.random.split(rng)
-        x_fake = gen_model.apply(
-            {"params": gen_state.params},
-            cond_test,
-            deterministic=True,
-            rngs={"noise": noise_rng},
-        )
-        critic_real = critic_model.apply(
-            {"params": critic_state.params}, x_test, cond_test,
-        ).mean()
-        critic_fake = critic_model.apply(
-            {"params": critic_state.params}, x_fake, cond_test,
-        ).mean()
-        return critic_real - critic_fake
+    def _make_evaluate_wd(gen_model, critic_model):
+        """Build a JIT-compiled function to compute WD on test data."""
+        @jax.jit
+        def evaluate_wd(critic_state, gen_state, x_test, cond_test, rng):
+            rng, noise_rng = jax.random.split(rng)
+            x_fake = gen_model.apply(
+                {"params": gen_state.params},
+                cond_test,
+                deterministic=True,
+                rngs={"noise": noise_rng},
+            )
+            critic_real = critic_model.apply(
+                {"params": critic_state.params}, x_test, cond_test,
+            ).mean()
+            critic_fake = critic_model.apply(
+                {"params": critic_state.params}, x_fake, cond_test,
+            ).mean()
+            return critic_real - critic_fake
+        return evaluate_wd
 
     def generate(
         self,
