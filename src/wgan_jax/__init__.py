@@ -875,6 +875,11 @@ def compare_dfs(
         ax2.set_title("fake")
         ax1.matshow(df_real[numeric_common].corr())
         ax2.matshow(df_fake[numeric_common].corr())
+        for ax in (ax1, ax2):
+            ax.set_xticks(range(len(numeric_common)))
+            ax.set_yticks(range(len(numeric_common)))
+            ax.set_xticklabels(numeric_common, rotation=90)
+            ax.set_yticklabels(numeric_common)
         fig1.tight_layout()
         plt.show()
 
